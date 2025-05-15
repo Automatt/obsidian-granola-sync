@@ -1,22 +1,64 @@
-# Obsidian Sample Plugin
+# Obsidian Granola Sync Plugin
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+This plugin allows you to synchronize your notes from Granola (https://granola.ai) directly into your Obsidian vault. It fetches documents from Granola, converts them from ProseMirror JSON format to Markdown, and saves them as `.md` files.
 
 This project uses TypeScript to provide type checking and documentation.
 The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+## Features
 
-## First time developing plugins?
+- **Sync Granola Notes**: Fetch your latest notes from Granola.
+- **Markdown Conversion**: Automatically converts notes from Granola's ProseMirror format to Markdown.
+- **Frontmatter Metadata**: Adds frontmatter to each note, including Granola document ID, title, creation date, and update date.
+- **Configurable Output**: Specify the folder within your vault where Granola notes should be saved.
+- **Manual Sync**: Trigger a sync anytime using a ribbon icon or a command palette command.
+- **Periodic Sync**: Optionally, configure the plugin to automatically sync notes at a defined interval.
+- **Customizable Settings**: Manage your Granola token path, output folder, sync interval, and enable/disable periodic sync through the plugin settings tab.
 
-Quick starting guide for new plugin devs:
+## Setup
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
+1.  **Get Your Granola Token**:
+    *   The plugin needs your Granola `supabase.json` file to authenticate with the Granola API.
+    *   You can typically find this file in the Granola application support directory. For example, on macOS, it's often located at: `~/Library/Application Support/Granola/supabase.json`.
+2.  **Place Token in Vault**:
+    *   Copy the `supabase.json` file into your Obsidian vault.
+    *   It's recommended to place it in a dedicated folder, for example, a folder named `configs` or `_private` at the root of your vault.
+3.  **Configure Plugin Settings**:
+    *   Open Obsidian settings (usually by clicking the gear icon).
+    *   Go to "Community Plugins" and find "Granola Sync".
+    *   In the plugin settings:
+        *   **Token Path**: Set this to the path of your `supabase.json` file *relative to your vault root*. For example, if you placed it in `VaultFolder/configs/supabase.json`, you would enter `configs/supabase.json`.
+        *   **Granola Folder**: Specify the name of the folder where your synced Granola notes should be saved (e.g., `Granola Notes`). This folder will be created if it doesn't exist.
+        *   Adjust other settings like `Sync Interval` and `Sync Enabled` as needed.
+
+## How to Use
+
+-   **Manual Sync**:
+    *   Click the "Sync Granola Notes" ribbon icon (it might look like dice, this can be changed).
+    *   Alternatively, open the command palette (usually `Cmd/Ctrl + P`) and search for "Sync Notes from Granola", then execute the command.
+-   **Automatic Sync**:
+    *   If "Sync Enabled" is turned on in the settings, the plugin will automatically fetch notes at the specified "Sync Interval".
+
+## Settings
+
+The plugin provides the following settings, accessible via the Obsidian settings panel under "Granola Sync":
+
+-   **Token Path**:
+    *   Description: Path to the Granola `supabase.json` token file.
+    *   Important: This needs to be a path relative to your vault root, e.g., `"configs/supabase.json"`. Copy this file from your Granola application directory (e.g., `~/Library/Application Support/Granola/supabase.json` on macOS).
+-   **Granola Folder**:
+    *   Description: Folder name within your vault where synced Granola notes will be written.
+    *   Example: `Granola Imported Notes`
+-   **Sync Interval**:
+    *   Description: Interval in seconds for periodic syncing of notes. Set to 0 to disable if "Sync Enabled" is on but you only want manual syncs, or rely on the toggle.
+    *   Example: `1800` (for 30 minutes)
+-   **Sync Enabled**:
+    *   Description: Enable or disable the periodic automatic sync of notes from Granola.
+
+## Developing
+
+### First time developing plugins?
+
 - Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
 - Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
 - Install NodeJS, then run `npm i` in the command line under your repo folder.
@@ -26,7 +68,7 @@ Quick starting guide for new plugin devs:
 - Enable plugin in settings window.
 - For updates to the Obsidian API run `npm update` in the command line under your repo folder.
 
-## Releasing new releases
+### Releasing new releases
 
 - Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
 - Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
@@ -37,26 +79,19 @@ Quick starting guide for new plugin devs:
 > You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
 > The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
 
-## Adding your plugin to the community plugin list
+### Adding your plugin to the community plugin list
 
 - Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
 - Publish an initial version.
 - Make sure you have a `README.md` file in the root of your repo.
 - Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
 
-## How to use
-
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
-
-## Manually installing the plugin
+### Manually installing the plugin
 
 - Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
 
-## Improve code quality with eslint (optional)
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
+### Improve code quality with eslint (optional)
+- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code.
 - To use eslint with this project, make sure to install eslint from terminal:
   - `npm install -g eslint`
 - To use eslint to analyze this project use this command:
@@ -65,7 +100,7 @@ Quick starting guide for new plugin devs:
 - If your source code is in a folder, such as `src`, you can use eslint with this command to analyze all files in that folder:
   - `eslint .\src\`
 
-## Funding URL
+### Funding URL
 
 You can include funding URLs where people who use your plugin can financially support it.
 
