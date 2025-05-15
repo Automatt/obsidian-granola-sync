@@ -50,7 +50,7 @@ export async function updateSection(
       logbookSectionLineNum = i;
     } else if (logbookSectionLineNum !== -1) {
       const currLevel = getHeadingLevel(fileLines[i]);
-      if (currLevel && currLevel <= headingLevel) {
+      if (headingLevel !== null && currLevel && currLevel <= headingLevel) {
         nextSectionLineNum = i;
         break;
       }
