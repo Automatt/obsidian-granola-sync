@@ -2,16 +2,25 @@ import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Set
 
 // Remember to rename these classes and interfaces!
 
-interface MyPluginSettings {
-	mySetting: string;
+interface GranolaSyncSettings {
+	tokenPath: string;
+	granolaFolder: string;
+	latestSyncTime: number;
+	isSyncEnabled: boolean;
+	syncInterval: number;
+
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+const DEFAULT_SETTINGS: GranolaSyncSettings = {
+	tokenPath: 'Library/Application Support/Granola/supabase.json',
+	granolaFolder: 'Granola',
+	latestSyncTime: 0,
+	isSyncEnabled: false,
+	syncInterval: 30 * 60 // every 30 minutes
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class GranolaSync extends Plugin {
+	settings: GranolaSyncSettings;
 
 	async onload() {
 		await this.loadSettings();
@@ -66,7 +75,7 @@ export default class MyPlugin extends Plugin {
 		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		this.addSettingTab(new GranolaSyncSettingTab(this.app, this));
 
 		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
 		// Using this function will automatically remove the event listener when this plugin is disabled.
@@ -107,10 +116,10 @@ class SampleModal extends Modal {
 	}
 }
 
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+class GranolaSyncSettingTab extends PluginSettingTab {
+	plugin: GranolaSync;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: GranolaSync) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -119,15 +128,48 @@ class SampleSettingTab extends PluginSettingTab {
 		const {containerEl} = this;
 
 		containerEl.empty();
+		containerEl.createEl('h3', {text: 'Granola Sync'});
 
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
+			.setName('Token Path')
+			.setDesc('Path to the Granola token file')
 			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
+				.setPlaceholder('Enter the path to the Granola token file')
+				.setValue(this.plugin.settings.tokenPath)
 				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
+					this.plugin.settings.tokenPath = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Granola Folder')
+			.setDesc('Folder name to write notes to')
+			.addText(text => text
+				.setPlaceholder('Name of the folder to write notes to')
+				.setValue(this.plugin.settings.granolaFolder)
+				.onChange(async (value) => {
+					this.plugin.settings.granolaFolder = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Sync Interval')
+			.setDesc('Interval to sync notes')
+			.addText(text => text
+				.setPlaceholder('Enter the interval to sync notes')
+				.setValue(this.plugin.settings.syncInterval.toString())
+				.onChange(async (value) => {
+					this.plugin.settings.syncInterval = parseInt(value);
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Sync Enabled')
+			.setDesc('Enable periodic sync of notes from Granola')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.isSyncEnabled)
+				.onChange(async (value) => {
+					this.plugin.settings.isSyncEnabled = value;
 					await this.plugin.saveSettings();
 				}));
 	}
