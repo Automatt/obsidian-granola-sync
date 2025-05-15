@@ -4,7 +4,8 @@ import {
 	getDailyNote,
 	getAllDailyNotes,
   } from "obsidian-daily-notes-interface";
-  
+import { updateSection } from "./textUtils";
+
 // Remember to rename these classes and interfaces!
 
 interface GranolaSyncSettings {
@@ -369,19 +370,7 @@ export default class GranolaSync extends Plugin {
 				});
 			}
 
-			const sectionHeading = this.settings.dailyNoteSectionHeading;
-			const escapedSectionHeading = this.escapeRegExp(sectionHeading);
-			
-			// Determine the heading level to correctly find the end of the section
-			const headingMatch = sectionHeading.match(/^#+/);
-			const headingLevel = headingMatch ? headingMatch[0].length : 0;
-			
-			// Regex to find the section: from the heading to the next heading of same or lower level, or EOF
-			// It captures the content *after* the heading in group 1.
-			// The (?=\n^#{1,${headingLevel}} |\n*$) part is a positive lookahead.
-			// It asserts that the match is followed by either a newline and another heading 
-			// (of level 1 up to current headingLevel) or by zero or more newlines at the end of the string.
-			const sectionRegex = new RegExp(`(^${escapedSectionHeading}\n)([\s\S]*?)(?=\n^#{1,${headingLevel}}\s[^#]|\n*$)`, "m");
+			const sectionHeadingSetting = this.settings.dailyNoteSectionHeading.trim(); // Trim the setting value
 
 			for (const [dateKey, notesForDay] of dailyNotesMap) {
 				const noteMoment = moment(dateKey, "YYYY-MM-DD");
@@ -392,29 +381,32 @@ export default class GranolaSync extends Plugin {
 					console.log(`Granola Sync: Created daily note ${dailyNoteFile.path}.`);
 				}
 
-				let fullSectionContent = sectionHeading + "\n";
-				for (const note of notesForDay) {
-					fullSectionContent += `\n### ${note.title}\n`;
-					fullSectionContent += `**Granola ID:** ${note.docId}\n`;
-					if (note.createdAt) fullSectionContent += `**Created:** ${note.createdAt}\n`;
-					if (note.updatedAt) fullSectionContent += `**Updated:** ${note.updatedAt}\n`;
-					fullSectionContent += `\n${note.markdown}\n`;
-				}
-
-				let currentFileContent = await this.app.vault.read(dailyNoteFile);
-				const match = currentFileContent.match(sectionRegex);
-
-				if (match) {
-					// Section exists, replace it. We replace the whole match (group 0)
-					currentFileContent = currentFileContent.replace(sectionRegex, fullSectionContent.trim() + "\n");
-					console.log(`Granola Sync: Updated section '${sectionHeading}' in daily note: ${dailyNoteFile.path}`);
+				let fullSectionContent = sectionHeadingSetting; // Use trimmed version here
+				if (notesForDay.length > 0) { // Only add note content if there are notes
+					for (const note of notesForDay) {
+						// Each note block starts with a newline, ensuring separation from heading or previous note
+						fullSectionContent += `\n### ${note.title}\n`;
+						fullSectionContent += `**Granola ID:** ${note.docId}\n`;
+						if (note.createdAt) fullSectionContent += `**Created:** ${note.createdAt}\n`;
+						if (note.updatedAt) fullSectionContent += `**Updated:** ${note.updatedAt}\n`;
+						fullSectionContent += `\n${note.markdown}\n`;
+					}
 				} else {
-					// Section does not exist, append it. Add a newline before if content exists.
-					const separator = currentFileContent.trim().length > 0 ? "\n\n" : "";
-					currentFileContent = currentFileContent.trim() + separator + fullSectionContent.trim() + "\n";
-					console.log(`Granola Sync: Appended section '${sectionHeading}' to daily note: ${dailyNoteFile.path}`);
+					// If there are no notes for the day, the section will just be the heading.
 				}
-				await this.app.vault.modify(dailyNoteFile, currentFileContent);
+
+				// Prepare the final content for the section, ensuring it ends with a single newline.
+				const completeSectionText = fullSectionContent.trim() + "\n";
+
+				// Use updateSection from textUtils.ts
+				try {
+					await updateSection(this.app, dailyNoteFile, sectionHeadingSetting, completeSectionText);
+					console.log(`Granola Sync: Processed section '${sectionHeadingSetting}' in daily note: ${dailyNoteFile.path} using updateSection.`);
+				} catch (error) {
+					console.error(`Granola Sync: Error using updateSection for '${dailyNoteFile.path}':`, error);
+					new Notice(`Error updating section in ${dailyNoteFile.path}. Check console.`, 7000);
+				}
+				
 				syncedCount += notesForDay.length;
 			}
 
