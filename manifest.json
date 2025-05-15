@@ -1,7 +1,7 @@
 {
 	"id": "granola-sync",
 	"name": "Granola Sync",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"minAppVersion": "0.15.0",
 	"description": "Sync Granola notes to Obsidian.",
 	"author": "Mathew Spolin",
