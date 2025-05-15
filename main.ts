@@ -409,7 +409,7 @@ class GranolaSyncSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Token Path')
-			.setDesc('Path to the Granola token file')
+			.setDesc('Path to the Granola token file.  This needs to be a path relative to your vault root, e.g., "configs/supabase.json".  Copy this file from the Granola directory, for example from ~/Library/Application Support/Granola/supabase.json')
 			.addText(text => text
 				.setPlaceholder('Enter the path to the Granola token file')
 				.setValue(this.plugin.settings.tokenPath)
