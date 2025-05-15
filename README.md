@@ -11,6 +11,7 @@ This plugin allows you to synchronize your notes from Granola (https://granola.a
 - **Manual Sync**: Trigger a sync anytime using a ribbon icon or a command palette command.
 - **Periodic Sync**: Optionally, configure the plugin to automatically sync notes at a defined interval.
 - **Customizable Settings**: Manage your Granola token path, output folder, sync interval, and enable/disable periodic sync through the plugin settings tab.
+- **Sync to Daily Notes**: Optionally sync your Granola notes directly into your daily notes, organized under a configurable section heading.
 
 ## Setup
 
@@ -51,6 +52,9 @@ The plugin provides the following settings, accessible via the Obsidian settings
     *   Example: `1800` (for 30 minutes)
 -   **Sync Enabled**:
     *   Description: Enable or disable the periodic automatic sync of notes from Granola.
+-   **Sync to Daily Notes**:
+    *   Description: Enable or disable syncing Granola notes directly into your daily notes, organized under a configurable section heading.
+    *   Example: `true` or `false`
 
 ## Gratitude 🙏
 
