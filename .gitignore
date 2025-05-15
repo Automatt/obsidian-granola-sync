@@ -26,3 +26,4 @@ data.json
 .eslintignore
 
 package-lock.json
+esbuild.config.mjs
