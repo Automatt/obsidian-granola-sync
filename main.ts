@@ -1,5 +1,10 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, requestUrl, normalizePath } from 'obsidian';
-
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, requestUrl, moment, normalizePath } from 'obsidian';
+import {
+	createDailyNote,
+	getDailyNote,
+	getAllDailyNotes,
+  } from "obsidian-daily-notes-interface";
+  
 // Remember to rename these classes and interfaces!
 
 interface GranolaSyncSettings {
@@ -8,6 +13,8 @@ interface GranolaSyncSettings {
 	latestSyncTime: number;
 	isSyncEnabled: boolean;
 	syncInterval: number;
+	syncToDailyNotes: boolean;
+	dailyNoteSectionHeading: string;
 }
 
 const DEFAULT_SETTINGS: GranolaSyncSettings = {
@@ -15,7 +22,9 @@ const DEFAULT_SETTINGS: GranolaSyncSettings = {
 	granolaFolder: 'Granola',
 	latestSyncTime: 0,
 	isSyncEnabled: false,
-	syncInterval: 30 * 60 // every 30 minutes
+	syncInterval: 30 * 60, // every 30 minutes
+	syncToDailyNotes: false,
+	dailyNoteSectionHeading: '## Synced Granola Notes'
 }
 
 // Helper interfaces for ProseMirror and API responses
@@ -150,6 +159,11 @@ export default class GranolaSync extends Plugin {
 			this.syncIntervalId = null;
 			console.log("Granola Sync: Cleared periodic sync interval.");
 		}
+	}
+
+	// Helper to escape strings for use in regex
+	private escapeRegExp(string: string): string {
+		return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 	}
 
 	private sanitizeFilename(title: string): string {
@@ -298,70 +312,149 @@ export default class GranolaSync extends Plugin {
 		}
 
 		// 3. Process and Save Documents
-		if (!this.settings.granolaFolder) {
-			new Notice("Granola Sync Error: Granola folder is not configured in settings.", 10000);
-			console.error("Granola Sync: Granola folder name is not configured.");
+		if (!this.settings.granolaFolder && !this.settings.syncToDailyNotes) { // Adjusted condition
+			new Notice("Granola Sync Error: Granola folder is not configured and not syncing to daily notes.", 10000);
+			console.error("Granola Sync: Granola folder name is not configured and not syncing to daily notes.");
 			return;
 		}
 		
 		const granolaFolderPath = normalizePath(this.settings.granolaFolder);
-		try {
-			if (!await this.app.vault.adapter.exists(granolaFolderPath)) {
-				await this.app.vault.createFolder(granolaFolderPath);
-				console.log(`Granola Sync: Created folder '${granolaFolderPath}'.`);
+
+		if (!this.settings.syncToDailyNotes) { // Create folder only if not syncing to daily notes
+			try {
+				if (!await this.app.vault.adapter.exists(granolaFolderPath)) {
+					await this.app.vault.createFolder(granolaFolderPath);
+					console.log(`Granola Sync: Created folder '${granolaFolderPath}'.`);
+				}
+			} catch (error) {
+				new Notice(`Granola Sync Error: Could not create folder '${granolaFolderPath}'. Check console.`, 10000);
+				console.error(`Granola Sync: Error creating folder '${granolaFolderPath}':`, error);
+				return;
 			}
-		} catch (error) {
-			new Notice(`Granola Sync Error: Could not create folder '${granolaFolderPath}'. Check console.`, 10000);
-			console.error(`Granola Sync: Error creating folder '${granolaFolderPath}':`, error);
-			return;
 		}
 
 		let syncedCount = 0;
-		for (const doc of documents) {
-			const title = doc.title || "Untitled Granola Note";
-			const docId = doc.id || "unknown_id";
-			console.log(`Granola Sync: Processing document: ${title} (ID: ${docId})`);
 
-			const contentToParse = doc.last_viewed_panel?.content;
-			if (!contentToParse || contentToParse.type !== "doc") {
-				console.warn(`Granola Sync: Skipping document '${title}' (ID: ${docId}) - no suitable content found.`);
-				continue;
+		if (this.settings.syncToDailyNotes) {
+			const dailyNotesMap: Map<string, { title: string; docId: string; createdAt?: string; updatedAt?: string; markdown: string }[]> = new Map();
+
+			for (const doc of documents) {
+				const title = doc.title || "Untitled Granola Note";
+				const docId = doc.id || "unknown_id";
+				const contentToParse = doc.last_viewed_panel?.content;
+
+				if (!contentToParse || contentToParse.type !== "doc") {
+					console.warn(`Granola Sync: Skipping document '${title}' (ID: ${docId}) for daily note - no suitable content.`);
+					continue;
+				}
+				const markdownContent = this.convertProsemirrorToMarkdown(contentToParse);
+
+				let noteDateSource: Date;
+				if (doc.created_at) noteDateSource = new Date(doc.created_at);
+				else if (doc.updated_at) noteDateSource = new Date(doc.updated_at);
+				else noteDateSource = new Date();
+				
+				const noteMoment = moment(noteDateSource);
+				const mapKey = noteMoment.format("YYYY-MM-DD"); // Use date string as key
+
+				if (!dailyNotesMap.has(mapKey)) {
+					dailyNotesMap.set(mapKey, []);
+				}
+				dailyNotesMap.get(mapKey)?.push({
+					title,
+					docId,
+					createdAt: doc.created_at,
+					updatedAt: doc.updated_at,
+					markdown: markdownContent
+				});
 			}
 
-			try {
-				const markdownContent = this.convertProsemirrorToMarkdown(contentToParse);
-				
-				let escapedTitleForYaml = title.replace(/"/g, '\\"');
-				
-				const frontmatter = 
-`---
-granola_id: ${docId}
-title: "${escapedTitleForYaml}"
-${doc.created_at ? `created_at: ${doc.created_at}` : ''}
-${doc.updated_at ? `updated_at: ${doc.updated_at}` : ''}
----
+			const sectionHeading = this.settings.dailyNoteSectionHeading;
+			const escapedSectionHeading = this.escapeRegExp(sectionHeading);
+			
+			// Determine the heading level to correctly find the end of the section
+			const headingMatch = sectionHeading.match(/^#+/);
+			const headingLevel = headingMatch ? headingMatch[0].length : 0;
+			
+			// Regex to find the section: from the heading to the next heading of same or lower level, or EOF
+			// It captures the content *after* the heading in group 1.
+			// The (?=\n^#{1,${headingLevel}} |\n*$) part is a positive lookahead.
+			// It asserts that the match is followed by either a newline and another heading 
+			// (of level 1 up to current headingLevel) or by zero or more newlines at the end of the string.
+			const sectionRegex = new RegExp(`(^${escapedSectionHeading}\n)([\s\S]*?)(?=\n^#{1,${headingLevel}}\s[^#]|\n*$)`, "m");
 
-`;
-				// Ensure created_at and updated_at lines are only added if they exist, and correctly formatted
-				let frontmatterLines = [
-					"---",
-					`granola_id: ${docId}`,
-					`title: "${escapedTitleForYaml}"`
-				];
-				if (doc.created_at) frontmatterLines.push(`created_at: ${doc.created_at}`);
-				if (doc.updated_at) frontmatterLines.push(`updated_at: ${doc.updated_at}`);
-				frontmatterLines.push("---", ""); // Extra newline after frontmatter block
+			for (const [dateKey, notesForDay] of dailyNotesMap) {
+				const noteMoment = moment(dateKey, "YYYY-MM-DD");
+				let dailyNoteFile = getDailyNote(noteMoment, getAllDailyNotes());
 
-				const finalMarkdown = frontmatterLines.join('\n') + markdownContent;
-				const filename = this.sanitizeFilename(title) + ".md";
-				const filePath = normalizePath(`${granolaFolderPath}/${filename}`);
+				if (!dailyNoteFile) {
+					dailyNoteFile = await createDailyNote(noteMoment);
+					console.log(`Granola Sync: Created daily note ${dailyNoteFile.path}.`);
+				}
 
-				await this.app.vault.adapter.write(filePath, finalMarkdown);
-				console.log(`Granola Sync: Successfully saved: ${filePath}`);
-				syncedCount++;
-			} catch (e) {
-				console.error(`Granola Sync: Error processing document '${title}' (ID: ${docId}):`, e);
-				new Notice(`Error processing document: ${title}. Check console.`, 7000);
+				let fullSectionContent = sectionHeading + "\n";
+				for (const note of notesForDay) {
+					fullSectionContent += `\n### ${note.title}\n`;
+					fullSectionContent += `**Granola ID:** ${note.docId}\n`;
+					if (note.createdAt) fullSectionContent += `**Created:** ${note.createdAt}\n`;
+					if (note.updatedAt) fullSectionContent += `**Updated:** ${note.updatedAt}\n`;
+					fullSectionContent += `\n${note.markdown}\n`;
+				}
+
+				let currentFileContent = await this.app.vault.read(dailyNoteFile);
+				const match = currentFileContent.match(sectionRegex);
+
+				if (match) {
+					// Section exists, replace it. We replace the whole match (group 0)
+					currentFileContent = currentFileContent.replace(sectionRegex, fullSectionContent.trim() + "\n");
+					console.log(`Granola Sync: Updated section '${sectionHeading}' in daily note: ${dailyNoteFile.path}`);
+				} else {
+					// Section does not exist, append it. Add a newline before if content exists.
+					const separator = currentFileContent.trim().length > 0 ? "\n\n" : "";
+					currentFileContent = currentFileContent.trim() + separator + fullSectionContent.trim() + "\n";
+					console.log(`Granola Sync: Appended section '${sectionHeading}' to daily note: ${dailyNoteFile.path}`);
+				}
+				await this.app.vault.modify(dailyNoteFile, currentFileContent);
+				syncedCount += notesForDay.length;
+			}
+
+		} else {
+			// Original logic for syncing to individual files
+			for (const doc of documents) {
+				const title = doc.title || "Untitled Granola Note";
+				const docId = doc.id || "unknown_id";
+				console.log(`Granola Sync: Processing document for individual file: ${title} (ID: ${docId})`);
+
+				const contentToParse = doc.last_viewed_panel?.content;
+				if (!contentToParse || contentToParse.type !== "doc") {
+					console.warn(`Granola Sync: Skipping document '${title}' (ID: ${docId}) - no suitable content found.`);
+					continue;
+				}
+
+				try {
+					const markdownContent = this.convertProsemirrorToMarkdown(contentToParse);
+					const escapedTitleForYaml = title.replace(/"/g, '\\"');
+
+					const frontmatterLines = [
+						"---",
+						`granola_id: ${docId}`,
+						`title: "${escapedTitleForYaml}"`
+					];
+					if (doc.created_at) frontmatterLines.push(`created_at: ${doc.created_at}`);
+					if (doc.updated_at) frontmatterLines.push(`updated_at: ${doc.updated_at}`);
+					frontmatterLines.push("---", "");
+
+					const finalMarkdown = frontmatterLines.join('\n') + markdownContent;
+					const filename = this.sanitizeFilename(title) + ".md";
+					const filePath = normalizePath(`${granolaFolderPath}/${filename}`);
+
+					await this.app.vault.adapter.write(filePath, finalMarkdown);
+					console.log(`Granola Sync: Successfully saved: ${filePath}`);
+					syncedCount++;
+				} catch (e) {
+					console.error(`Granola Sync: Error processing document '${title}' (ID: ${docId}) for individual file:`, e);
+					new Notice(`Error processing document: ${title}. Check console.`, 7000);
+				}
 			}
 		}
 
@@ -373,7 +466,6 @@ ${doc.updated_at ? `updated_at: ${doc.updated_at}` : ''}
 		
 		const statusBarItemEl = this.app.workspace.containerEl.querySelector('.status-bar-item .status-bar-item-segment');
 		if (statusBarItemEl) statusBarItemEl.setText(`Granola Sync: Last synced ${new Date(this.settings.latestSyncTime).toLocaleString()}`);
-
 	}
 }
 
@@ -454,6 +546,27 @@ class GranolaSyncSettingTab extends PluginSettingTab {
 					this.plugin.settings.isSyncEnabled = value;
 					await this.plugin.saveSettings();
 					// this.plugin.setupPeriodicSync(); // Settings save already calls this
+				}));
+
+		new Setting(containerEl)
+			.setName('Sync to Daily Notes')
+			.setDesc('Append synced notes to the daily note corresponding to their creation date, instead of creating separate files.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.syncToDailyNotes)
+				.onChange(async (value) => {
+					this.plugin.settings.syncToDailyNotes = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Daily Note Section Heading')
+			.setDesc('The heading to use for the section where Granola notes will be added in your daily notes. Example: "## Granola Sync"')
+			.addText(text => text
+				.setPlaceholder('Enter section heading')
+				.setValue(this.plugin.settings.dailyNoteSectionHeading)
+				.onChange(async (value) => {
+					this.plugin.settings.dailyNoteSectionHeading = value;
+					await this.plugin.saveSettings();
 				}));
 	}
 }
