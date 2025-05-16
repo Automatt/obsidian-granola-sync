@@ -50,7 +50,7 @@ This plugin was inspired by this awesome [blog post](https://josephthacker.com/h
 To make changes to this plugin, first ensure you have the dependencies installed.
 
 ```
-yarn install
+npm install
 ```
 
 ### Development
@@ -58,7 +58,7 @@ yarn install
 To start building the plugin with what mode enabled run the following command:
 
 ```
-yarn dev
+npm run dev
 ```
 
 _Note: If you haven't already installed the hot-reload-plugin you'll be prompted to. You need to enable that plugin in your obsidian vault before hot-reloading will start. You might need to refresh your plugin list for it to show up._
@@ -68,5 +68,5 @@ _Note: If you haven't already installed the hot-reload-plugin you'll be prompted
 To start a release build run the following command:
 
 ```
-yarn build
+npm run build
 ```
