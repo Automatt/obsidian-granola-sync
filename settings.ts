@@ -17,8 +17,8 @@ export const DEFAULT_SETTINGS: GranolaSyncSettings = {
 	latestSyncTime: 0,
 	isSyncEnabled: false,
 	syncInterval: 30 * 60, // every 30 minutes
-	syncToDailyNotes: false,
-	dailyNoteSectionHeading: '## Synced Granola Notes'
+	syncToDailyNotes: true,
+	dailyNoteSectionHeading: '## Granola Notes'
 };
 
 export class GranolaSyncSettingTab extends PluginSettingTab {
