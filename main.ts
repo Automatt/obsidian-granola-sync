@@ -46,8 +46,6 @@ export default class GranolaSync extends Plugin {
 			new Notice('Granola Sync: Starting manual sync...');
 			await this.syncGranolaNotes();
 		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
 
 		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
 		const statusBarItemEl = this.addStatusBarItem();
@@ -65,37 +63,11 @@ export default class GranolaSync extends Plugin {
 			}
 		});
 
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
-		});
-
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new GranolaSyncSettingTab(this.app, this));
 
 		// Setup periodic sync based on settings
 		this.setupPeriodicSync();
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
 
 		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
 		// Example: this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
@@ -119,17 +91,13 @@ export default class GranolaSync extends Plugin {
 	setupPeriodicSync() {
 		this.clearPeriodicSync(); // Clear any existing interval first
 		if (this.settings.isSyncEnabled && this.settings.syncInterval > 0) {
-			console.log(`Granola Sync: Setting up periodic sync every ${this.settings.syncInterval} seconds.`);
 			this.syncIntervalId = window.setInterval(async () => {
 				const statusBarItemEl = this.app.workspace.containerEl.querySelector('.status-bar-item .status-bar-item-segment');
 				if (statusBarItemEl) statusBarItemEl.setText('Granola Sync: Auto-syncing...');
-				console.log("Granola Sync: Performing periodic sync.");
 				await this.syncGranolaNotes();
 				if (statusBarItemEl) statusBarItemEl.setText(`Granola Sync: Last synced ${new Date(this.settings.latestSyncTime).toLocaleString()}`);
 			}, this.settings.syncInterval * 1000);
 			this.registerInterval(this.syncIntervalId); // Register with Obsidian to auto-clear on disable
-		} else {
-			console.log("Granola Sync: Periodic sync is disabled or interval is zero.");
 		}
 	}
 
@@ -137,7 +105,6 @@ export default class GranolaSync extends Plugin {
 		if (this.syncIntervalId !== null) {
 			window.clearInterval(this.syncIntervalId);
 			this.syncIntervalId = null;
-			console.log("Granola Sync: Cleared periodic sync interval.");
 		}
 	}
 
@@ -210,7 +177,6 @@ export default class GranolaSync extends Plugin {
 	}
 
 	async syncGranolaNotes() {
-		console.log("Granola Sync: Starting sync process");
 		new Notice("Granola Sync: Starting sync...", 5000);
 
 		// 1. Load Credentials
@@ -218,7 +184,6 @@ export default class GranolaSync extends Plugin {
 		try {
 			if (!this.settings.tokenPath) {
 				new Notice("Granola Sync Error: Token path is not configured in settings.", 10000);
-				console.error("Granola Sync: Token path is not configured.");
 				return;
 			}
 			
@@ -228,12 +193,10 @@ export default class GranolaSync extends Plugin {
 						"Granola Sync Warning: Token path appears to be an absolute path. " +
 						"Please ensure it's a path relative to your vault root, e.g., 'configs/supabase.json'. " +
 						"Plugins typically cannot access arbitrary file system locations.", 15000);
-					console.warn("Granola Sync: Token path is absolute. This might fail due to sandboxing.");
 			}
 			
 			if (!await this.app.vault.adapter.exists(normalizePath(this.settings.tokenPath))) {
 				new Notice(`Granola Sync Error: Credentials file not found at '${this.settings.tokenPath}'. Please check the path in settings.`, 10000);
-				console.error(`Granola Sync: Credentials file not found at: ${this.settings.tokenPath}`);
 				return;
 			}
 
@@ -244,14 +207,11 @@ export default class GranolaSync extends Plugin {
 
 			if (!accessToken) {
 				new Notice("Granola Sync Error: No access token found in credentials file.", 10000);
-				console.error("Granola Sync: No access token found.");
 				return;
 			}
-			console.log("Granola Sync: Successfully loaded credentials.");
 
 		} catch (error) {
 			new Notice("Granola Sync Error: Failed to load credentials. Check console for details.", 10000);
-			console.error("Granola Sync: Error loading credentials file:", error);
 			return;
 		}
 
@@ -279,22 +239,18 @@ export default class GranolaSync extends Plugin {
 			const apiResponse = response.json as GranolaApiResponse;
 			if (!apiResponse || !apiResponse.docs) {
 				new Notice("Granola Sync Error: Invalid API response format.", 10000);
-				console.error("Granola Sync: API response format is unexpected - 'docs' key not found or empty response", apiResponse);
 				return;
 			}
 			documents = apiResponse.docs;
-			console.log(`Granola Sync: Successfully fetched ${documents.length} documents.`);
 
 		} catch (error) {
 			new Notice("Granola Sync Error: Failed to fetch documents from Granola API. Check console.", 10000);
-			console.error("Granola Sync: Error fetching documents:", error);
 			return;
 		}
 
 		// 3. Process and Save Documents
 		if (!this.settings.granolaFolder && !this.settings.syncToDailyNotes) { // Adjusted condition
 			new Notice("Granola Sync Error: Granola folder is not configured and not syncing to daily notes.", 10000);
-			console.error("Granola Sync: Granola folder name is not configured and not syncing to daily notes.");
 			return;
 		}
 		
@@ -304,11 +260,9 @@ export default class GranolaSync extends Plugin {
 			try {
 				if (!await this.app.vault.adapter.exists(granolaFolderPath)) {
 					await this.app.vault.createFolder(granolaFolderPath);
-					console.log(`Granola Sync: Created folder '${granolaFolderPath}'.`);
 				}
 			} catch (error) {
 				new Notice(`Granola Sync Error: Could not create folder '${granolaFolderPath}'. Check console.`, 10000);
-				console.error(`Granola Sync: Error creating folder '${granolaFolderPath}':`, error);
 				return;
 			}
 		}
@@ -324,7 +278,6 @@ export default class GranolaSync extends Plugin {
 				const contentToParse = doc.last_viewed_panel?.content;
 
 				if (!contentToParse || contentToParse.type !== "doc") {
-					console.warn(`Granola Sync: Skipping document '${title}' (ID: ${docId}) for daily note - no suitable content.`);
 					continue;
 				}
 				const markdownContent = this.convertProsemirrorToMarkdown(contentToParse);
@@ -357,7 +310,6 @@ export default class GranolaSync extends Plugin {
 
 				if (!dailyNoteFile) {
 					dailyNoteFile = await createDailyNote(noteMoment);
-					console.log(`Granola Sync: Created daily note ${dailyNoteFile.path}.`);
 				}
 
 				let fullSectionContent = sectionHeadingSetting; // Use trimmed version here
@@ -380,9 +332,7 @@ export default class GranolaSync extends Plugin {
 				// Use updateSection from textUtils.ts
 				try {
 					await updateSection(this.app, dailyNoteFile, sectionHeadingSetting, completeSectionText);
-					console.log(`Granola Sync: Processed section '${sectionHeadingSetting}' in daily note: ${dailyNoteFile.path} using updateSection.`);
 				} catch (error) {
-					console.error(`Granola Sync: Error using updateSection for '${dailyNoteFile.path}':`, error);
 					new Notice(`Error updating section in ${dailyNoteFile.path}. Check console.`, 7000);
 				}
 				
@@ -394,11 +344,9 @@ export default class GranolaSync extends Plugin {
 			for (const doc of documents) {
 				const title = doc.title || "Untitled Granola Note";
 				const docId = doc.id || "unknown_id";
-				console.log(`Granola Sync: Processing document for individual file: ${title} (ID: ${docId})`);
 
 				const contentToParse = doc.last_viewed_panel?.content;
 				if (!contentToParse || contentToParse.type !== "doc") {
-					console.warn(`Granola Sync: Skipping document '${title}' (ID: ${docId}) - no suitable content found.`);
 					continue;
 				}
 
@@ -420,10 +368,8 @@ export default class GranolaSync extends Plugin {
 					const filePath = normalizePath(`${granolaFolderPath}/${filename}`);
 
 					await this.app.vault.adapter.write(filePath, finalMarkdown);
-					console.log(`Granola Sync: Successfully saved: ${filePath}`);
 					syncedCount++;
 				} catch (e) {
-					console.error(`Granola Sync: Error processing document '${title}' (ID: ${docId}) for individual file:`, e);
 					new Notice(`Error processing document: ${title}. Check console.`, 7000);
 				}
 			}
@@ -433,25 +379,9 @@ export default class GranolaSync extends Plugin {
 		await this.saveSettings(); // Save settings to persist latestSyncTime
 
 		new Notice(`Granola Sync: Complete. ${syncedCount} notes synced to '${granolaFolderPath}'.`, 7000);
-		console.log(`Granola Sync: Sync complete. ${syncedCount} notes saved to '${granolaFolderPath}'.`);
 		
 		const statusBarItemEl = this.app.workspace.containerEl.querySelector('.status-bar-item .status-bar-item-segment');
 		if (statusBarItemEl) statusBarItemEl.setText(`Granola Sync: Last synced ${new Date(this.settings.latestSyncTime).toLocaleString()}`);
 	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
