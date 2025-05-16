@@ -26,9 +26,11 @@ This plugin allows you to synchronize your notes from Granola (https://granola.a
     *   Open Obsidian settings (usually by clicking the gear icon).
     *   Go to "Community Plugins" and find "Granola Sync".
     *   In the plugin settings:
-        *   **Token Path**: Set this to the path of your `supabase.json` file *relative to your vault root*. For example, if you placed it in `VaultFolder/configs/supabase.json`, you would enter `configs/supabase.json`.
-        *   **Granola Folder**: Specify the name of the folder where your synced Granola notes should be saved (e.g., `Granola Notes`). This folder will be created if it doesn't exist.
-        *   Adjust other settings like `Sync Interval` and `Sync Enabled` as needed.
+        *   **Path to Granola Access Token File**: Set this to the path of your `supabase.json` file *relative to your vault root*. For example, if you placed it in `VaultFolder/configs/supabase.json`, you would enter `configs/supabase.json`.
+        *   **Put Granola Notes into Daily Notes**: By default, your Granola notes will be added to a section in each Daily Note corresponding to the date on the Granola note.  In subsequent Syncs this section will be replaced with content from Granola, but other parts of the daily notes won't be touched.
+        *   **Daily Note Section Heading**: Specify the name of the section heading used.  After you've synced your notes, you shouldn't change this.  The plugin uses this to find and replace the note content so there are aren't duplicated notes on subsequent syncs.
+        *   **Granola Folder**: If you're not putting content into Daily Notes, the plugin will import your notes into a specific folder, one file per Granola note.  Specify the name of the folder where your synced Granola notes should be saved (e.g., `Granola Notes`). This folder will be created if it doesn't exist.
+        *   Adjust other settings like `Sync Interval` and `Periodic Sync Enabled` as needed.
 
 ## How to Use
 
@@ -36,26 +38,7 @@ This plugin allows you to synchronize your notes from Granola (https://granola.a
     *   Click the "Sync Granola Notes" ribbon icon (it might look like dice, this can be changed).
     *   Alternatively, open the command palette (usually `Cmd/Ctrl + P`) and search for "Sync Notes from Granola", then execute the command.
 -   **Automatic Sync**:
-    *   If "Sync Enabled" is turned on in the settings, the plugin will automatically fetch notes at the specified "Sync Interval".
-
-## Settings
-
-The plugin provides the following settings, accessible via the Obsidian settings panel under "Granola Sync":
-
--   **Token Path**:
-    *   Description: Path to the Granola `supabase.json` token file.
-    *   Important: This needs to be a path relative to your vault root, e.g., `"configs/supabase.json"`. Copy this file from your Granola application directory (e.g., `~/Library/Application Support/Granola/supabase.json` on macOS).
--   **Granola Folder**:
-    *   Description: Folder name within your vault where synced Granola notes will be written.
-    *   Example: `Granola Imported Notes`
--   **Sync Interval**:
-    *   Description: Interval in seconds for periodic syncing of notes. Set to 0 to disable if "Sync Enabled" is on but you only want manual syncs, or rely on the toggle.
-    *   Example: `1800` (for 30 minutes)
--   **Sync Enabled**:
-    *   Description: Enable or disable the periodic automatic sync of notes from Granola.
--   **Sync to Daily Notes**:
-    *   Description: Enable or disable syncing Granola notes directly into your daily notes, organized under a configurable section heading.
-    *   Example: `true` or `false`
+    *   If "Periodic Sync Enabled" is turned on in the settings, the plugin will automatically fetch notes at the specified "Sync Interval".
 
 ## Gratitude 🙏
 
