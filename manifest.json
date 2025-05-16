@@ -1,10 +1,11 @@
 {
 	"id": "granola-sync",
 	"name": "Granola Sync",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"minAppVersion": "0.15.0",
 	"description": "Sync Granola notes to your vault.",
 	"author": "Mathew Spolin",
 	"authorUrl": "https://x.com/Automatt",
+	"fundingUrl": "https://buymeacoffee.com/automatt",
 	"isDesktopOnly": false
 }
