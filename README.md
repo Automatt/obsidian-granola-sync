@@ -18,6 +18,7 @@ This plugin allows you to synchronize your notes from Granola (https://granola.a
 1.  **Get Your Granola Token**:
     *   The plugin needs your Granola `supabase.json` file to authenticate with the Granola API.
     *   You can typically find this file in the Granola application support directory. For example, on macOS, it's often located at: `~/Library/Application Support/Granola/supabase.json`.
+    *   The Granola token expires periodically, so if you want persistent syncing, you might want to either create a symbolic link or set up an automation like a cron job to keep the file up to date.  Plug ins can't typically access files outside of the vault, so this step is necessary until Granola provides better API access.
 2.  **Place Token in Vault**:
     *   Copy the `supabase.json` file into your Obsidian vault.
     *   It's recommended to place it in a dedicated folder, for example, a folder named `configs` or `_private` at the root of your vault.
