@@ -41,12 +41,6 @@ export default class GranolaSync extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sync Granola Notes', async (evt: MouseEvent) => {
-			new Notice('Granola Sync: Starting manual sync...');
-			await this.syncGranolaNotes();
-		});
-
 		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
 		const statusBarItemEl = this.addStatusBarItem();
 		statusBarItemEl.setText('Granola Sync Idle'); // Updated status bar text
