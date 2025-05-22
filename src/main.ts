@@ -1,4 +1,4 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, requestUrl, moment, normalizePath } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, requestUrl, normalizePath } from 'obsidian';
 import {
 	createDailyNote,
 	getDailyNote,
@@ -6,6 +6,7 @@ import {
 } from "obsidian-daily-notes-interface";
 import { updateSection } from "./textUtils";
 import { GranolaSyncSettings, DEFAULT_SETTINGS, GranolaSyncSettingTab } from './settings';
+import moment from 'moment';
 
 // Helper interfaces for ProseMirror and API responses
 interface ProseMirrorNode {
