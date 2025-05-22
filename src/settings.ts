@@ -1,5 +1,5 @@
 import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
-import GranolaSync from './main';
+import type GranolaSync from './main';
 
 export interface GranolaSyncSettings {
 	tokenPath: string;
@@ -37,7 +37,7 @@ export class GranolaSyncSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Path to Granola Access Token File')
-			.setDesc('Path to the Granola token file.  This needs to be a path relative to your vault root, e.g., "configs/supabase.json".  Copy this file from the Granola settings directory.  On my Mac for example from ~/Library/Application Support/Granola/supabase.json')
+			.setDesc('Path to the Granola token file relative to your vault root (e.g., "configs/supabase.json"). This file contains your authentication token and needs to be copied from your Granola application directory. On macOS, it\'s typically located at ~/Library/Application Support/Granola/supabase.json. The token expires periodically, so you may need to update this file when authentication fails.')
 			.addText(text => text
 				.setPlaceholder('Enter the path to the Granola token file')
 				.setValue(this.plugin.settings.tokenPath)

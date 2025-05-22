@@ -1,6 +1,8 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
+    "baseUrl": "./src",
+    "rootDir": "./src",
+    "outDir": "./",
     "inlineSourceMap": true,
     "inlineSources": true,
     "module": "ESNext",
@@ -16,9 +18,17 @@
       "ES5",
       "ES6",
       "ES7"
-    ]
+    ],
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["jest", "node"]
   },
   "include": [
-    "**/*.ts"
+    "src/**/*.ts",
+    "*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "tests"
   ]
 }

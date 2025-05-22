@@ -183,10 +183,10 @@ export default class GranolaSync extends Plugin {
 			
 			// Check if the token path is an absolute path (likely problematic)
 			if (this.settings.tokenPath.startsWith('/') || this.settings.tokenPath.match(/^[A-Za-z]:\\/)) {
-					new Notice(
-						"Granola Sync Warning: Token path appears to be an absolute path. " +
-						"Please ensure it's a path relative to your vault root, e.g., 'configs/supabase.json'. " +
-						"Plugins typically cannot access arbitrary file system locations.", 15000);
+				new Notice(
+					"Granola Sync Warning: Token path appears to be an absolute path. " +
+					"Please ensure it's a path relative to your vault root, e.g., 'configs/supabase.json'. " +
+					"Plugins typically cannot access arbitrary file system locations.", 15000);
 			}
 			
 			if (!await this.app.vault.adapter.exists(normalizePath(this.settings.tokenPath))) {
@@ -195,17 +195,24 @@ export default class GranolaSync extends Plugin {
 			}
 
 			const tokenFileContent = await this.app.vault.adapter.read(normalizePath(this.settings.tokenPath));
-			const tokenData = JSON.parse(tokenFileContent);
-			const cognitoTokens = JSON.parse(tokenData.cognito_tokens); // Assuming cognito_tokens is a stringified JSON
-			accessToken = cognitoTokens.access_token;
+			try {
+				const tokenData = JSON.parse(tokenFileContent);
+				const cognitoTokens = JSON.parse(tokenData.cognito_tokens); // Assuming cognito_tokens is a stringified JSON
+				accessToken = cognitoTokens.access_token;
 
-			if (!accessToken) {
-				new Notice("Granola Sync Error: No access token found in credentials file.", 10000);
+				if (!accessToken) {
+					new Notice("Granola Sync Error: No access token found in credentials file. The token may have expired.", 10000);
+					return;
+				}
+			} catch (parseError) {
+				new Notice("Granola Sync Error: Invalid JSON format in credentials file. Please ensure the file is properly formatted.", 10000);
+				console.error("Token file parse error:", parseError);
 				return;
 			}
 
 		} catch (error) {
-			new Notice("Granola Sync Error: Failed to load credentials. Check console for details.", 10000);
+			new Notice("Granola Sync Error: Failed to load credentials. Please check if the file exists and is accessible.", 10000);
+			console.error("Credentials loading error:", error);
 			return;
 		}
 
@@ -219,26 +226,37 @@ export default class GranolaSync extends Plugin {
 					"Authorization": `Bearer ${accessToken}`,
 					"Content-Type": "application/json",
 					"Accept": "*/*",
-					"User-Agent": "GranolaObsidianPlugin/0.1.0", // Custom User-Agent
-        			"X-Client-Version": "ObsidianPlugin-0.1.0" // Custom Client Version
+					"User-Agent": "GranolaObsidianPlugin/0.1.7",
+					"X-Client-Version": "ObsidianPlugin-0.1.7"
 				},
 				body: JSON.stringify({
-					"limit": 100, // Consider making this configurable or implement pagination
+					"limit": 100,
 					"offset": 0,
 					"include_last_viewed_panel": true
 				}),
-				throw: true // Throws error for non-2xx status codes
+				throw: true
 			});
 
 			const apiResponse = response.json as GranolaApiResponse;
 			if (!apiResponse || !apiResponse.docs) {
-				new Notice("Granola Sync Error: Invalid API response format.", 10000);
+				new Notice("Granola Sync Error: Invalid API response format. Please try again later.", 10000);
 				return;
 			}
 			documents = apiResponse.docs;
 
-		} catch (error) {
-			new Notice("Granola Sync Error: Failed to fetch documents from Granola API. Check console.", 10000);
+		} catch (error: any) {
+			if (error.status === 401) {
+				new Notice("Granola Sync Error: Authentication failed. Your access token may have expired. Please update your credentials file.", 10000);
+			} else if (error.status === 403) {
+				new Notice("Granola Sync Error: Access forbidden. Please check your permissions.", 10000);
+			} else if (error.status === 404) {
+				new Notice("Granola Sync Error: API endpoint not found. Please check for updates.", 10000);
+			} else if (error.status >= 500) {
+				new Notice("Granola Sync Error: Granola API server error. Please try again later.", 10000);
+			} else {
+				new Notice("Granola Sync Error: Failed to fetch documents from Granola API. Please check your internet connection.", 10000);
+			}
+			console.error("API request error:", error);
 			return;
 		}
 
