@@ -1,6 +1,9 @@
 # Obsidian Granola Sync
 
-A plugin for Obsidian that syncs your Granola notes to your vault.
+[![Tests](https://github.com/mathew/obsidian-granola-sync/actions/workflows/release.yml/badge.svg)](https://github.com/mathew/obsidian-granola-sync/actions/workflows/release.yml)
+
+This plugin allows you to synchronize your notes from Granola (https://granola.ai) directly into your Obsidian vault. It fetches documents from Granola, converts them from ProseMirror JSON format to Markdown, and saves them as `.md` files.
+
 
 ## Features
 
@@ -57,21 +60,6 @@ npm run test:watch
 # Run tests with coverage
 npm run test:coverage
 ```
-
-### Project Structure
-
-- `src/` - Source code
-  - `main.ts` - Main plugin class
-  - `settings.ts` - Settings management
-  - `services/` - Service classes
-    - `GranolaApiService.ts` - API interaction
-    - `FileSystemService.ts` - File system operations
-    - `MarkdownConverterService.ts` - ProseMirror to Markdown conversion
-  - `interfaces.ts` - TypeScript interfaces
-  - `types.ts` - Shared types
-- `tests/` - Test files
-  - `unit/` - Unit tests
-  - `integration/` - Integration tests
 
 ### Testing Strategy
 
