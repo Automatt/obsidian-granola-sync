@@ -26,3 +26,6 @@ data.json
 .eslintignore
 
 package-lock.json
+
+# Coverage reports
+coverage/
