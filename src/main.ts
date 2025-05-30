@@ -19,6 +19,8 @@ import {
   GranolaSyncSettings,
   DEFAULT_SETTINGS,
   GranolaSyncSettingTab,
+  SyncDestination,
+  TranscriptDestination,
 } from "./settings";
 import moment from "moment";
 
@@ -65,14 +67,25 @@ export default class GranolaSync extends Plugin {
 
     // This adds a simple command that can be triggered anywhere
     this.addCommand({
-      id: "sync-granola-notes",
-      name: "Sync Notes from Granola", // Updated command name
+      id: "sync-granola",
+      name: "Sync from Granola", // Updated command name
       callback: async () => {
         new Notice("Granola Sync: Starting manual sync...");
         statusBarItemEl.setText("Granola Sync: Syncing...");
 
-        await this.syncGranolaNotes();
-        await this.syncGranolaTranscripts();
+        if (this.settings.syncNotes) {
+          await this.syncGranolaNotes();
+        }
+        if (this.settings.syncTranscripts) {
+          await this.syncGranolaTranscripts();
+        }
+
+        if (!this.settings.syncNotes && !this.settings.syncTranscripts) {
+          new Notice(
+            "Granola Sync: No sync options enabled. Please enable either notes or transcripts in settings."
+          );
+        }
+
         statusBarItemEl.setText(
           `Granola Sync: Last synced ${new Date(
             this.settings.latestSyncTime
@@ -164,7 +177,14 @@ export default class GranolaSync extends Plugin {
         );
         if (statusBarItemEl)
           statusBarItemEl.setText("Granola Sync: Auto-syncing...");
-        await this.syncGranolaNotes();
+
+        if (this.settings.syncNotes) {
+          await this.syncGranolaNotes();
+        }
+        if (this.settings.syncTranscripts) {
+          await this.syncGranolaTranscripts();
+        }
+
         if (statusBarItemEl)
           statusBarItemEl.setText(
             `Granola Sync: Last synced ${new Date(
@@ -221,6 +241,113 @@ export default class GranolaSync extends Plugin {
     } else {
       return normalizePath(baseFolder);
     }
+  }
+
+  // Generic save to disk method
+  private async saveToDisk(
+    filename: string,
+    content: string,
+    noteDate: Date,
+    isTranscript: boolean = false
+  ): Promise<boolean> {
+    try {
+      // Determine the folder path based on settings and file type
+      let folderPath: string;
+
+      if (isTranscript) {
+        // Handle transcript destinations
+        switch (this.settings.transcriptDestination) {
+          case TranscriptDestination.DAILY_NOTE_FOLDER_STRUCTURE:
+            folderPath = this.computeDailyNoteFolderPath(noteDate);
+            break;
+          case TranscriptDestination.GRANOLA_TRANSCRIPTS_FOLDER:
+            folderPath = normalizePath(this.settings.granolaTranscriptsFolder);
+            break;
+        }
+      } else {
+        // Handle note destinations
+        switch (this.settings.syncDestination) {
+          case SyncDestination.DAILY_NOTE_FOLDER_STRUCTURE:
+            folderPath = this.computeDailyNoteFolderPath(noteDate);
+            break;
+          case SyncDestination.GRANOLA_FOLDER:
+            folderPath = normalizePath(this.settings.granolaFolder);
+            break;
+          default:
+            // This shouldn't happen for individual files
+            new Notice(
+              `Invalid sync destination for individual files: ${this.settings.syncDestination}`,
+              7000
+            );
+            return false;
+        }
+      }
+
+      // Ensure the folder exists
+      if (!(await this.ensureFolderExists(folderPath))) {
+        new Notice(
+          `Error creating folder: ${folderPath}. Skipping file: ${filename}`,
+          7000
+        );
+        return false;
+      }
+
+      const filePath = normalizePath(`${folderPath}/${filename}`);
+      await this.app.vault.adapter.write(filePath, content);
+      return true;
+    } catch (e) {
+      new Notice(`Error saving file: ${filename}. Check console.`, 7000);
+      console.error("Error saving file to disk:", e);
+      return false;
+    }
+  }
+
+  // Save a note to disk based on the sync destination setting
+  private async saveNoteToDisk(
+    doc: GranolaDoc,
+    markdownContent: string
+  ): Promise<boolean> {
+    const title = doc.title || "Untitled Granola Note";
+    const docId = doc.id || "unknown_id";
+
+    // Prepare frontmatter
+    const escapedTitleForYaml = title.replace(/"/g, '\\"');
+    const frontmatterLines = [
+      "---",
+      `granola_id: ${docId}`,
+      `title: "${escapedTitleForYaml}"`,
+    ];
+    if (doc.created_at) frontmatterLines.push(`created_at: ${doc.created_at}`);
+    if (doc.updated_at) frontmatterLines.push(`updated_at: ${doc.updated_at}`);
+    frontmatterLines.push("---", "");
+
+    const finalMarkdown = frontmatterLines.join("\n") + markdownContent;
+    const filename = this.sanitizeFilename(title) + ".md";
+
+    // Get the note date
+    let noteDate: Date;
+    if (doc.created_at) noteDate = new Date(doc.created_at);
+    else if (doc.updated_at) noteDate = new Date(doc.updated_at);
+    else noteDate = new Date();
+
+    return this.saveToDisk(filename, finalMarkdown, noteDate, false);
+  }
+
+  // Save a transcript to disk based on the transcript destination setting
+  private async saveTranscriptToDisk(
+    doc: GranolaDoc,
+    transcriptContent: string
+  ): Promise<boolean> {
+    const title = doc.title || "Untitled Granola Note";
+    const filename = this.sanitizeFilename(title) + "-transcript.md";
+
+    // Get the note date
+    let noteDate: Date;
+    if (doc.created_at) noteDate = new Date(doc.created_at);
+    else if (doc.updated_at) noteDate = new Date(doc.updated_at);
+    else noteDate = new Date();
+
+    return this.saveToDisk(filename, transcriptContent, noteDate, true);
   }
 
   private convertProsemirrorToMarkdown(
@@ -425,7 +552,12 @@ export default class GranolaSync extends Plugin {
   }
 
   async syncGranolaNotes() {
-    new Notice("Granola Sync: Starting sync...", 5000);
+    // Check if note syncing is enabled
+    if (!this.settings.syncNotes) {
+      return;
+    }
+
+    new Notice("Granola Sync: Starting notes sync...", 5000);
 
     // Check credentials
     const accessToken = await this.checkCredentials();
@@ -435,32 +567,10 @@ export default class GranolaSync extends Plugin {
     const documents = await this.fetchDocuments(accessToken);
     if (!documents) return;
 
-    // Check folder configuration
-    if (
-      !this.settings.granolaFolder &&
-      !this.settings.syncToDailyNotes &&
-      !this.settings.useDailyNoteFolderStructure
-    ) {
-      new Notice(
-        "Granola Sync Error: No folder configuration set. Please configure either a Granola folder, enable sync to daily notes, or use daily note folder structure.",
-        10000
-      );
-      return;
-    }
-
-    const granolaFolderPath = normalizePath(this.settings.granolaFolder);
-
-    // Create folder if needed
-    if (
-      !this.settings.syncToDailyNotes &&
-      !this.settings.useDailyNoteFolderStructure
-    ) {
-      if (!(await this.ensureFolderExists(granolaFolderPath))) return;
-    }
-
     let syncedCount = 0;
 
-    if (this.settings.syncToDailyNotes) {
+    if (this.settings.syncDestination === SyncDestination.DAILY_NOTES) {
+      // Sync to daily notes
       const dailyNotesMap: Map<
         string,
         {
@@ -508,10 +618,10 @@ export default class GranolaSync extends Plugin {
 
       for (const [dateKey, notesForDay] of dailyNotesMap) {
         const noteMoment = moment(dateKey, "YYYY-MM-DD");
-        let dailyNoteFile = getDailyNote(noteMoment, getAllDailyNotes());
+        let dailyNoteFile = getDailyNote(noteMoment as any, getAllDailyNotes());
 
         if (!dailyNoteFile) {
-          dailyNoteFile = await createDailyNote(noteMoment);
+          dailyNoteFile = await createDailyNote(noteMoment as any);
         }
 
         let fullSectionContent = sectionHeadingSetting; // Use trimmed version here
@@ -552,69 +662,18 @@ export default class GranolaSync extends Plugin {
         syncedCount += notesForDay.length;
       }
     } else {
-      // Original logic for syncing to individual files
+      // Sync to individual files (either Granola folder or daily note folder structure)
       for (const doc of documents) {
-        const title = doc.title || "Untitled Granola Note";
-        const docId = doc.id || "unknown_id";
-
         const contentToParse = doc.last_viewed_panel?.content;
         if (!contentToParse || contentToParse.type !== "doc") {
           continue;
         }
 
-        try {
-          const markdownContent =
-            this.convertProsemirrorToMarkdown(contentToParse);
-          const escapedTitleForYaml = title.replace(/"/g, '\\"');
+        const markdownContent =
+          this.convertProsemirrorToMarkdown(contentToParse);
 
-          const frontmatterLines = [
-            "---",
-            `granola_id: ${docId}`,
-            `title: "${escapedTitleForYaml}"`,
-          ];
-          if (doc.created_at)
-            frontmatterLines.push(`created_at: ${doc.created_at}`);
-          if (doc.updated_at)
-            frontmatterLines.push(`updated_at: ${doc.updated_at}`);
-          frontmatterLines.push("---", "");
-
-          const finalMarkdown = frontmatterLines.join("\n") + markdownContent;
-          const filename = this.sanitizeFilename(title) + ".md";
-
-          // Determine the folder path based on settings
-          let folderPath: string;
-          if (this.settings.useDailyNoteFolderStructure) {
-            // Get the note date
-            let noteDate: Date;
-            if (doc.created_at) noteDate = new Date(doc.created_at);
-            else if (doc.updated_at) noteDate = new Date(doc.updated_at);
-            else noteDate = new Date();
-
-            // Compute folder path based on daily note settings
-            folderPath = this.computeDailyNoteFolderPath(noteDate);
-
-            // Ensure the folder exists
-            if (!(await this.ensureFolderExists(folderPath))) {
-              new Notice(
-                `Error creating folder: ${folderPath}. Skipping note: ${title}`,
-                7000
-              );
-              continue;
-            }
-          } else {
-            // Use the configured Granola folder
-            folderPath = granolaFolderPath;
-          }
-
-          const filePath = normalizePath(`${folderPath}/${filename}`);
-
-          await this.app.vault.adapter.write(filePath, finalMarkdown);
+        if (await this.saveNoteToDisk(doc, markdownContent)) {
           syncedCount++;
-        } catch (e) {
-          new Notice(
-            `Error processing document: ${title}. Check console.`,
-            7000
-          );
         }
       }
     }
@@ -623,12 +682,16 @@ export default class GranolaSync extends Plugin {
     await this.saveSettings(); // Save settings to persist latestSyncTime
 
     let locationMessage: string;
-    if (this.settings.syncToDailyNotes) {
-      locationMessage = "daily notes";
-    } else if (this.settings.useDailyNoteFolderStructure) {
-      locationMessage = "daily note folder structure";
-    } else {
-      locationMessage = `'${granolaFolderPath}'`;
+    switch (this.settings.syncDestination) {
+      case SyncDestination.DAILY_NOTES:
+        locationMessage = "daily notes";
+        break;
+      case SyncDestination.DAILY_NOTE_FOLDER_STRUCTURE:
+        locationMessage = "daily note folder structure";
+        break;
+      case SyncDestination.GRANOLA_FOLDER:
+        locationMessage = `'${this.settings.granolaFolder}'`;
+        break;
     }
 
     new Notice(
@@ -648,6 +711,11 @@ export default class GranolaSync extends Plugin {
   }
 
   async syncGranolaTranscripts() {
+    // Check if transcript syncing is enabled
+    if (!this.settings.syncTranscripts) {
+      return;
+    }
+
     new Notice("Granola Sync: Starting transcript sync...", 5000);
 
     // Check credentials
@@ -657,20 +725,6 @@ export default class GranolaSync extends Plugin {
     // Fetch documents
     const documents = await this.fetchDocuments(accessToken);
     if (!documents) return;
-
-    // Check folder configuration
-    if (!this.settings.granolaFolder) {
-      new Notice(
-        "Granola Sync Error: Granola folder is not configured.",
-        10000
-      );
-      return;
-    }
-
-    const granolaFolderPath = normalizePath(this.settings.granolaFolder);
-
-    // Create folder if needed
-    if (!(await this.ensureFolderExists(granolaFolderPath))) return;
 
     let syncedCount = 0;
     for (const doc of documents) {
@@ -709,10 +763,9 @@ export default class GranolaSync extends Plugin {
           title
         );
 
-        const filename = this.sanitizeFilename(title) + "-transcript.md";
-        const filePath = normalizePath(`${granolaFolderPath}/${filename}`);
-        await this.app.vault.adapter.write(filePath, transcriptMd);
-        syncedCount++;
+        if (await this.saveTranscriptToDisk(doc, transcriptMd)) {
+          syncedCount++;
+        }
       } catch (e) {
         new Notice(
           `Error fetching transcript for document: ${title}. Check console.`,
@@ -721,8 +774,19 @@ export default class GranolaSync extends Plugin {
         console.error(`Transcript fetch error for doc ${docId}:`, e);
       }
     }
+
+    let locationMessage: string;
+    switch (this.settings.transcriptDestination) {
+      case TranscriptDestination.DAILY_NOTE_FOLDER_STRUCTURE:
+        locationMessage = "daily note folder structure";
+        break;
+      case TranscriptDestination.GRANOLA_TRANSCRIPTS_FOLDER:
+        locationMessage = `'${this.settings.granolaTranscriptsFolder}'`;
+        break;
+    }
+
     new Notice(
-      `Granola Sync: Complete. ${syncedCount} transcripts synced to '${granolaFolderPath}'.`,
+      `Granola Sync: Complete. ${syncedCount} transcripts synced to ${locationMessage}.`,
       7000
     );
   }
