@@ -1,13 +1,4 @@
-import {
-  App,
-  Editor,
-  MarkdownView,
-  Modal,
-  Notice,
-  Plugin,
-  requestUrl,
-  normalizePath,
-} from "obsidian";
+import { Notice, Plugin, requestUrl, normalizePath } from "obsidian";
 import {
   createDailyNote,
   getDailyNote,
@@ -70,15 +61,17 @@ export default class GranolaSync extends Plugin {
       id: "sync-granola",
       name: "Sync from Granola", // Updated command name
       callback: async () => {
-        new Notice("Granola Sync: Starting manual sync...");
+        new Notice("Granola Sync: Starting manual sync.");
         statusBarItemEl.setText("Granola Sync: Syncing...");
 
-        if (this.settings.syncNotes) {
-          await this.syncGranolaNotes();
-        }
+        // Always sync transcripts first if enabled, so notes can link to them
         if (this.settings.syncTranscripts) {
-          await this.syncGranolaTranscripts();
+          await this.syncTranscripts();
         }
+        if (this.settings.syncNotes) {
+          await this.syncNotes();
+        }
+        new Notice("Granola Sync: Manual sync complete.");
 
         if (!this.settings.syncNotes && !this.settings.syncTranscripts) {
           new Notice(
@@ -178,11 +171,12 @@ export default class GranolaSync extends Plugin {
         if (statusBarItemEl)
           statusBarItemEl.setText("Granola Sync: Auto-syncing...");
 
-        if (this.settings.syncNotes) {
-          await this.syncGranolaNotes();
-        }
+        // Always sync transcripts first if enabled, so notes can link to them
         if (this.settings.syncTranscripts) {
-          await this.syncGranolaTranscripts();
+          await this.syncTranscripts();
+        }
+        if (this.settings.syncNotes) {
+          await this.syncNotes();
         }
 
         if (statusBarItemEl)
@@ -240,6 +234,24 @@ export default class GranolaSync extends Plugin {
       return normalizePath(`${baseFolder}/${folderParts.join("/")}`);
     } else {
       return normalizePath(baseFolder);
+    }
+  }
+
+  // Compute the full path for a transcript file based on settings
+  private computeTranscriptPath(title: string, noteDate: Date): string {
+    const transcriptFilename = this.sanitizeFilename(title) + "-transcript.md";
+
+    if (
+      this.settings.transcriptDestination ===
+      TranscriptDestination.DAILY_NOTE_FOLDER_STRUCTURE
+    ) {
+      const folderPath = this.computeDailyNoteFolderPath(noteDate);
+      return normalizePath(`${folderPath}/${transcriptFilename}`);
+    } else {
+      // GRANOLA_TRANSCRIPTS_FOLDER
+      return normalizePath(
+        `${this.settings.granolaTranscriptsFolder}/${transcriptFilename}`
+      );
     }
   }
 
@@ -321,7 +333,29 @@ export default class GranolaSync extends Plugin {
     if (doc.updated_at) frontmatterLines.push(`updated_at: ${doc.updated_at}`);
     frontmatterLines.push("---", "");
 
-    const finalMarkdown = frontmatterLines.join("\n") + markdownContent;
+    let finalMarkdown = frontmatterLines.join("\n");
+
+    // Add transcript link if enabled
+    if (
+      this.settings.syncTranscripts &&
+      this.settings.createLinkFromNoteToTranscript
+    ) {
+      // Use the date from the note
+      let noteDate: Date;
+      if (doc.created_at) noteDate = new Date(doc.created_at);
+      else if (doc.updated_at) noteDate = new Date(doc.updated_at);
+      else noteDate = new Date();
+
+      // Compute transcript path using the helper method
+      const transcriptPath = this.computeTranscriptPath(title, noteDate);
+
+      // Add the link
+      finalMarkdown += `[Transcript](${transcriptPath})\n\n`;
+    }
+
+    // Add the actual note content
+    finalMarkdown += markdownContent;
+
     const filename = this.sanitizeFilename(title) + ".md";
 
     // Get the note date
@@ -551,13 +585,11 @@ export default class GranolaSync extends Plugin {
     return transcriptMd;
   }
 
-  async syncGranolaNotes() {
+  async syncNotes() {
     // Check if note syncing is enabled
     if (!this.settings.syncNotes) {
       return;
     }
-
-    new Notice("Granola Sync: Starting notes sync...", 5000);
 
     // Check credentials
     const accessToken = await this.checkCredentials();
@@ -635,6 +667,27 @@ export default class GranolaSync extends Plugin {
               fullSectionContent += `**Created:** ${note.createdAt}\n`;
             if (note.updatedAt)
               fullSectionContent += `**Updated:** ${note.updatedAt}\n`;
+
+            // Add transcript link if enabled
+            if (
+              this.settings.syncTranscripts &&
+              this.settings.createLinkFromNoteToTranscript
+            ) {
+              // Use the date from the note
+              let noteDate: Date;
+              if (note.createdAt) noteDate = new Date(note.createdAt);
+              else if (note.updatedAt) noteDate = new Date(note.updatedAt);
+              else noteDate = new Date(dateKey);
+
+              // Compute transcript path using the helper method
+              const transcriptPath = this.computeTranscriptPath(
+                note.title,
+                noteDate
+              );
+
+              fullSectionContent += `**Transcript:** [[${transcriptPath}]]\n`;
+            }
+
             fullSectionContent += `\n${note.markdown}\n`;
           }
         } else {
@@ -694,11 +747,6 @@ export default class GranolaSync extends Plugin {
         break;
     }
 
-    new Notice(
-      `Granola Sync: Complete. ${syncedCount} notes synced to ${locationMessage}.`,
-      7000
-    );
-
     const statusBarItemEl = this.app.workspace.containerEl.querySelector(
       ".status-bar-item .status-bar-item-segment"
     );
@@ -710,13 +758,11 @@ export default class GranolaSync extends Plugin {
       );
   }
 
-  async syncGranolaTranscripts() {
+  async syncTranscripts() {
     // Check if transcript syncing is enabled
     if (!this.settings.syncTranscripts) {
       return;
     }
-
-    new Notice("Granola Sync: Starting transcript sync...", 5000);
 
     // Check credentials
     const accessToken = await this.checkCredentials();
@@ -784,10 +830,5 @@ export default class GranolaSync extends Plugin {
         locationMessage = `'${this.settings.granolaTranscriptsFolder}'`;
         break;
     }
-
-    new Notice(
-      `Granola Sync: Complete. ${syncedCount} transcripts synced to ${locationMessage}.`,
-      7000
-    );
   }
 }
