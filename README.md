@@ -1,16 +1,20 @@
 # Obsidian Granola Sync
 
-[![Tests](https://github.com/Automatt/obsidian-granola-sync/actions/workflows/release.yml/badge.svg)](https://github.com/Automatt/obsidian-granola-sync/actions/workflows/release.yml)
+[![Tests](https://github.com/tomelliot/obsidian-granola-sync/actions/workflows/release.yml/badge.svg)](https://github.com/tomelliot/obsidian-granola-sync/actions/workflows/release.yml)
 
-This plugin allows you to synchronize your notes from Granola (https://granola.ai) directly into your Obsidian vault. It fetches documents from Granola, converts them from ProseMirror JSON format to Markdown, and saves them as `.md` files.
+This plugin allows you to synchronize your notes and transcripts from Granola (https://granola.ai) directly into your Obsidian vault. It fetches documents from Granola, converts them from ProseMirror JSON format to Markdown, and saves them as `.md` files.
 
+Forked from [Automatt/obsidian-granola-sync/](https://github.com/Automatt/obsidian-granola-sync/)
 
 ## Features
 
 - Sync Granola notes to your Obsidian vault
-- Support for syncing to daily notes
-- Periodic automatic syncing
-- Customizable sync settings
+- Sync Granola transcripts to your vault, with flexible destination options
+- Support for syncing to daily notes, a dedicated folder, or a daily note folder structure
+- Option to create links between notes and their transcripts
+- Periodic automatic syncing with customizable interval
+- Granular settings for notes and transcripts
+- Customizable sync settings and destinations
 
 ## Installation
 
@@ -21,8 +25,15 @@ This plugin allows you to synchronize your notes from Granola (https://granola.a
 ## Configuration
 
 1. Set the path to your Granola token file in the plugin settings
-2. Configure whether to sync to daily notes or a specific folder
-3. Set up periodic sync if desired
+2. Configure note syncing:
+   - Choose whether to sync notes
+   - Select the destination: a specific folder, daily notes, or daily note folder structure
+   - Optionally set a section heading for daily notes
+3. Configure transcript syncing:
+   - Choose whether to sync transcripts
+   - Select the destination: a dedicated transcripts folder or daily note folder structure
+   - Optionally enable linking from notes to their transcripts
+4. Set up periodic sync and adjust the interval as desired
 
 ## Development
 
@@ -66,7 +77,7 @@ npm run test:coverage
 The plugin uses a combination of unit and integration tests:
 
 1. Unit Tests:
-   - Test individual service classes in isolation
+   - Test individual service classes and utilities in isolation
    - Mock external dependencies
    - Focus on business logic
 
