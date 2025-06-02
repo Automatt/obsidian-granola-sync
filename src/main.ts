@@ -14,6 +14,10 @@ import {
   TranscriptDestination,
 } from "./settings";
 import moment from "moment";
+import {
+  startGranolaCredentialsServer,
+  stopGranolaCredentialsServer,
+} from "./serve";
 
 // Helper interfaces for ProseMirror and API responses
 interface ProseMirrorNode {
@@ -98,8 +102,9 @@ export default class GranolaSync extends Plugin {
     // We handle our interval manually with setupPeriodicSync and clearPeriodicSync
   }
 
-  onunload() {
+  async onunload() {
     this.clearPeriodicSync();
+    stopGranolaCredentialsServer();
   }
 
   async loadSettings() {
@@ -117,32 +122,20 @@ export default class GranolaSync extends Plugin {
   async loadCredentials() {
     this.accessToken = null;
     this.tokenLoadError = null;
+    // Start the credentials server before making the request
+    startGranolaCredentialsServer();
     try {
-      if (!this.settings.tokenPath) {
-        this.tokenLoadError = "Token path is not configured in settings.";
-        return;
-      }
-      if (
-        this.settings.tokenPath.startsWith("/") ||
-        this.settings.tokenPath.match(/^[A-Za-z]:\\/)
-      ) {
-        this.tokenLoadError =
-          "Token path appears to be an absolute path. Please ensure it's a path relative to your vault root, e.g., 'configs/supabase.json'. Plugins typically cannot access arbitrary file system locations.";
-        return;
-      }
-      if (
-        !(await this.app.vault.adapter.exists(
-          normalizePath(this.settings.tokenPath)
-        ))
-      ) {
-        this.tokenLoadError = `Credentials file not found at '${this.settings.tokenPath}'. Please check the path in settings.`;
-        return;
-      }
-      const tokenFileContent = await this.app.vault.adapter.read(
-        normalizePath(this.settings.tokenPath)
-      );
+      // Fetch credentials from local server
+      const response = await requestUrl({
+        url: "http://127.0.0.1:2590/",
+        method: "GET",
+        throw: true,
+      });
       try {
-        const tokenData = JSON.parse(tokenFileContent);
+        const tokenData =
+          typeof response.json === "string"
+            ? JSON.parse(response.json)
+            : response.json;
         const cognitoTokens = JSON.parse(tokenData.cognito_tokens); // Assuming cognito_tokens is a stringified JSON
         this.accessToken = cognitoTokens.access_token;
         if (!this.accessToken) {
@@ -151,13 +144,16 @@ export default class GranolaSync extends Plugin {
         }
       } catch (parseError) {
         this.tokenLoadError =
-          "Invalid JSON format in credentials file. Please ensure the file is properly formatted.";
-        console.error("Token file parse error:", parseError);
+          "Invalid JSON format in credentials response. Please ensure the server returns valid JSON.";
+        console.error("Token response parse error:", parseError);
       }
     } catch (error) {
       this.tokenLoadError =
-        "Failed to load credentials. Please check if the file exists and is accessible.";
+        "Failed to load credentials from http://127.0.0.1:2590/. Please check if the credentials server is running.";
       console.error("Credentials loading error:", error);
+    } finally {
+      // Always stop the credentials server after the request
+      stopGranolaCredentialsServer();
     }
   }
 
