@@ -15,14 +15,14 @@ import {
 } from "./settings";
 import moment from "moment";
 import {
-  startGranolaCredentialsServer,
-  stopGranolaCredentialsServer,
-} from "./serve";
-import {
   fetchGranolaDocuments,
   fetchGranolaTranscript,
   GranolaDoc,
 } from "./services/granolaApi";
+import {
+  loadCredentials as loadGranolaCredentials,
+  stopCredentialsServer,
+} from "./services/credentials";
 
 // Helper interfaces for ProseMirror and API responses
 interface ProseMirrorNode {
@@ -95,7 +95,7 @@ export default class GranolaSync extends Plugin {
 
   async onunload() {
     this.clearPeriodicSync();
-    stopGranolaCredentialsServer();
+    stopCredentialsServer();
   }
 
   async loadSettings() {
@@ -113,39 +113,9 @@ export default class GranolaSync extends Plugin {
   async loadCredentials() {
     this.accessToken = null;
     this.tokenLoadError = null;
-    // Start the credentials server before making the request
-    startGranolaCredentialsServer();
-    try {
-      // Fetch credentials from local server
-      const response = await requestUrl({
-        url: "http://127.0.0.1:2590/",
-        method: "GET",
-        throw: true,
-      });
-      try {
-        const tokenData =
-          typeof response.json === "string"
-            ? JSON.parse(response.json)
-            : response.json;
-        const cognitoTokens = JSON.parse(tokenData.cognito_tokens); // Assuming cognito_tokens is a stringified JSON
-        this.accessToken = cognitoTokens.access_token;
-        if (!this.accessToken) {
-          this.tokenLoadError =
-            "No access token found in credentials file. The token may have expired.";
-        }
-      } catch (parseError) {
-        this.tokenLoadError =
-          "Invalid JSON format in credentials response. Please ensure the server returns valid JSON.";
-        console.error("Token response parse error:", parseError);
-      }
-    } catch (error) {
-      this.tokenLoadError =
-        "Failed to load credentials from http://127.0.0.1:2590/. Please check if the credentials server is running.";
-      console.error("Credentials loading error:", error);
-    } finally {
-      // Always stop the credentials server after the request
-      stopGranolaCredentialsServer();
-    }
+    const { accessToken, error } = await loadGranolaCredentials();
+    this.accessToken = accessToken;
+    this.tokenLoadError = error;
   }
 
   setupPeriodicSync() {
