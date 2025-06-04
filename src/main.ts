@@ -18,6 +18,11 @@ import {
   startGranolaCredentialsServer,
   stopGranolaCredentialsServer,
 } from "./serve";
+import {
+  fetchGranolaDocuments,
+  fetchGranolaTranscript,
+  GranolaDoc,
+} from "./services/granolaApi";
 
 // Helper interfaces for ProseMirror and API responses
 interface ProseMirrorNode {
@@ -30,20 +35,6 @@ interface ProseMirrorNode {
 interface ProseMirrorDoc {
   type: "doc";
   content: ProseMirrorNode[];
-}
-
-interface GranolaDoc {
-  id: string;
-  title: string;
-  created_at?: string;
-  updated_at?: string;
-  last_viewed_panel?: {
-    content?: ProseMirrorDoc;
-  };
-}
-
-interface GranolaApiResponse {
-  docs: GranolaDoc[];
 }
 
 export default class GranolaSync extends Plugin {
@@ -457,33 +448,7 @@ export default class GranolaSync extends Plugin {
     accessToken: string
   ): Promise<GranolaDoc[] | null> {
     try {
-      const response = await requestUrl({
-        url: "https://api.granola.ai/v2/get-documents",
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-          Accept: "*/*",
-          "User-Agent": "GranolaObsidianPlugin/0.1.7",
-          "X-Client-Version": "ObsidianPlugin-0.1.7",
-        },
-        body: JSON.stringify({
-          limit: 100,
-          offset: 0,
-          include_last_viewed_panel: true,
-        }),
-        throw: true,
-      });
-
-      const apiResponse = response.json as GranolaApiResponse;
-      if (!apiResponse || !apiResponse.docs) {
-        new Notice(
-          "Granola Sync Error: Invalid API response format. Please try again later.",
-          10000
-        );
-        return null;
-      }
-      return apiResponse.docs;
+      return await fetchGranolaDocuments(accessToken);
     } catch (error: any) {
       if (error.status === 401) {
         new Notice(
@@ -773,38 +738,15 @@ export default class GranolaSync extends Plugin {
       const docId = doc.id;
       const title = doc.title || "Untitled Granola Note";
       try {
-        const transcriptResp = await requestUrl({
-          url: "https://api.granola.ai/v1/get-document-transcript",
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-            Accept: "*/*",
-            "User-Agent": "GranolaObsidianPlugin/0.1.7",
-            "X-Client-Version": "ObsidianPlugin-0.1.7",
-          },
-          body: JSON.stringify({ document_id: docId }),
-          throw: true,
-        });
-        const transcriptData = transcriptResp.json as Array<{
-          document_id: string;
-          start_timestamp: string;
-          text: string;
-          source: string;
-          id: string;
-          is_final: boolean;
-          end_timestamp: string;
-        }>;
+        const transcriptData = await fetchGranolaTranscript(accessToken, docId);
         if (!Array.isArray(transcriptData) || transcriptData.length === 0) {
           continue;
         }
-
         // Use the extracted formatting function
         const transcriptMd = this.formatTranscriptBySpeaker(
           transcriptData,
           title
         );
-
         if (await this.saveTranscriptToDisk(doc, transcriptMd)) {
           syncedCount++;
         }
