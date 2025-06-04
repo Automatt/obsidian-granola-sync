@@ -5,7 +5,7 @@ import {
   getAllDailyNotes,
   getDailyNoteSettings,
 } from "obsidian-daily-notes-interface";
-import { updateSection } from "./textUtils";
+import { updateSection } from "./utils/textUtils";
 import {
   GranolaSyncSettings,
   DEFAULT_SETTINGS,
