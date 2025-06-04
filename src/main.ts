@@ -40,12 +40,19 @@ interface ProseMirrorDoc {
 export default class GranolaSync extends Plugin {
   settings: GranolaSyncSettings;
   syncIntervalId: number | null = null;
-  accessToken: string | null = null;
-  tokenLoadError: string | null = null;
+  accessToken: string;
 
   async onload() {
     await this.loadSettings();
-    await this.loadCredentials();
+    const { accessToken, error } = await loadGranolaCredentials();
+    if (!accessToken || error) {
+      new Notice(
+        `Granola Sync Error: ${error || "No access token loaded."}`,
+        10000
+      );
+      return;
+    }
+    this.accessToken = accessToken;
 
     // This adds a status bar item to the bottom of the app. Does not work on mobile apps.
     const statusBarItemEl = this.addStatusBarItem();
@@ -100,22 +107,11 @@ export default class GranolaSync extends Plugin {
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-    await this.loadCredentials();
   }
 
   async saveSettings() {
     await this.saveData(this.settings);
-    // Re-evaluate periodic sync when settings change (e.g., interval or enabled status)
-    await this.loadCredentials();
     this.setupPeriodicSync();
-  }
-
-  async loadCredentials() {
-    this.accessToken = null;
-    this.tokenLoadError = null;
-    const { accessToken, error } = await loadGranolaCredentials();
-    this.accessToken = accessToken;
-    this.tokenLoadError = error;
   }
 
   setupPeriodicSync() {
@@ -152,11 +148,6 @@ export default class GranolaSync extends Plugin {
       window.clearInterval(this.syncIntervalId);
       this.syncIntervalId = null;
     }
-  }
-
-  // Helper to escape strings for use in regex
-  private escapeRegExp(string: string): string {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
   }
 
   private sanitizeFilename(title: string): string {
@@ -402,23 +393,9 @@ export default class GranolaSync extends Plugin {
       .trim();
   }
 
-  private async checkCredentials(): Promise<string | null> {
-    if (this.tokenLoadError) {
-      new Notice(`Granola Sync Error: ${this.tokenLoadError}`, 10000);
-      return null;
-    }
-    if (!this.accessToken) {
-      new Notice("Granola Sync Error: No access token loaded.", 10000);
-      return null;
-    }
-    return this.accessToken;
-  }
-
-  private async fetchDocuments(
-    accessToken: string
-  ): Promise<GranolaDoc[] | null> {
+  private async fetchDocuments(): Promise<GranolaDoc[] | null> {
     try {
-      return await fetchGranolaDocuments(accessToken);
+      return await fetchGranolaDocuments(this.accessToken);
     } catch (error: any) {
       if (error.status === 401) {
         new Notice(
@@ -522,12 +499,8 @@ export default class GranolaSync extends Plugin {
       return;
     }
 
-    // Check credentials
-    const accessToken = await this.checkCredentials();
-    if (!accessToken) return;
-
-    // Fetch documents
-    const documents = await this.fetchDocuments(accessToken);
+    // Fetch documents (now handles credentials)
+    const documents = await this.fetchDocuments();
     if (!documents) return;
 
     let syncedCount = 0;
@@ -695,12 +668,8 @@ export default class GranolaSync extends Plugin {
       return;
     }
 
-    // Check credentials
-    const accessToken = await this.checkCredentials();
-    if (!accessToken) return;
-
-    // Fetch documents
-    const documents = await this.fetchDocuments(accessToken);
+    // Fetch documents (now handles credentials)
+    const documents = await this.fetchDocuments();
     if (!documents) return;
 
     let syncedCount = 0;
@@ -708,7 +677,10 @@ export default class GranolaSync extends Plugin {
       const docId = doc.id;
       const title = doc.title || "Untitled Granola Note";
       try {
-        const transcriptData = await fetchGranolaTranscript(accessToken, docId);
+        const transcriptData = await fetchGranolaTranscript(
+          this.accessToken,
+          docId
+        );
         if (!Array.isArray(transcriptData) || transcriptData.length === 0) {
           continue;
         }
